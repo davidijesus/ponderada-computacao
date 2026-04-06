@@ -1,0 +1,93 @@
+services:
+  api:
+    build:
+      context: ./src/api
+    container_name: api
+    ports:
+      - "8080:8080"
+    depends_on:
+      - broker
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  broker:
+    image: rabbitmq:3-management
+    container_name: broker
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - broker_data:/var/lib/rabbitmq
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  database:
+    image: postgres:16-alpine
+    container_name: database
+    environment:
+      POSTGRES_USER: pipeline_user
+      POSTGRES_PASSWORD: pipeline_pass
+      POSTGRES_DB: pipeline_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  worker:
+    build:
+      context: ./src/worker
+    container_name: worker
+    depends_on:
+      - broker
+      - database
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  k6:
+    image: grafana/k6:latest
+    container_name: k6
+    user: "0:0"
+    profiles: ["loadtest"]
+    depends_on:
+      - api
+    environment:
+      BASE_URL: http://api:8080
+      K6_SCRIPT: ${K6_SCRIPT:-sensor_load_test.js}
+      K6_ARGS: ${K6_ARGS:-}
+    volumes:
+      - ./src/tests/loadtest:/scripts:ro
+      - ./src/tests/loadtest/results:/results
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "mkdir -p /results /tmp/k6-results && TS=$$(date +%Y%m%d_%H%M%S) && NAME=$$(basename \"$${K6_SCRIPT}\" .js) && SUMMARY_TMP=/tmp/k6-results/$${NAME}_$${TS}_summary.json && METRICS_TMP=/tmp/k6-results/$${NAME}_$${TS}_metrics.json && SUMMARY_OUT=/results/$${NAME}_$${TS}_summary.json && METRICS_OUT=/results/$${NAME}_$${TS}_metrics.json && k6 run /scripts/$${K6_SCRIPT} $${K6_ARGS} --summary-export $${SUMMARY_TMP} --out json=$${METRICS_TMP}; EXIT_CODE=$$?; cp -f $${SUMMARY_TMP} $${SUMMARY_OUT} 2>/dev/null || true; cp -f $${METRICS_TMP} $${METRICS_OUT} 2>/dev/null || true; exit $$EXIT_CODE",
+      ]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+volumes:
+  broker_data:
+  db_data:

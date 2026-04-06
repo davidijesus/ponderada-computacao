@@ -1,0 +1,9 @@
+# binários
+src/api/api
+src/worker/worker
+
+# resultados de loadtest
+src/tests/loadtest/results/
+
+# go
+*.test
