@@ -1,4 +1,4 @@
-# sensor-pipeline
+# Ponderada Sensor Pipeline
 
 Sistema de ingestão de eventos de sensores com arquitetura desacoplada utilizando **Go, RabbitMQ, PostgreSQL, Docker e k6**.
 
